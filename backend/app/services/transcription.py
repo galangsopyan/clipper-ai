@@ -7,20 +7,21 @@ from faster_whisper import WhisperModel
 
 
 # ============================================================
-# CONFIG - OPTIMIZED FOR AMD RYZEN 5 5600G
+# CONFIG
 # ============================================================
 
-MODEL_SIZE = "base"
+# Untuk akurasi lebih baik daripada "base"
+MODEL_SIZE = "small"
 
 DEVICE = "cpu"
 COMPUTE_TYPE = "int8"
 
-# Kecepatan lebih penting daripada beam search besar
-BEAM_SIZE = 1
-BEST_OF = 1
-
-# Bahasa Indonesia
 LANGUAGE = "id"
+
+# Akurasi lebih diprioritaskan
+BEAM_SIZE = 5
+BEST_OF = 5
+
 
 # ============================================================
 # MODEL CACHE
@@ -47,6 +48,7 @@ def get_model() -> WhisperModel:
         print(f"Device      : {DEVICE}")
         print(f"Compute     : {COMPUTE_TYPE}")
         print(f"Beam size   : {BEAM_SIZE}")
+        print(f"Best of     : {BEST_OF}")
         print(f"Language    : {LANGUAGE}")
 
         start_time = time.perf_counter()
@@ -72,7 +74,7 @@ def get_model() -> WhisperModel:
 
 
 # ============================================================
-# TRANSCRIBE AUDIO / VIDEO
+# TRANSCRIBE
 # ============================================================
 
 def transcribe_audio(
@@ -82,14 +84,13 @@ def transcribe_audio(
 ) -> dict[str, Any]:
 
     # ========================================================
-    # VALIDATE FILE
+    # VALIDATE
     # ========================================================
 
     if not audio_path.exists():
 
         raise FileNotFoundError(
-            f"Audio/video tidak ditemukan: "
-            f"{audio_path}"
+            f"Audio/video tidak ditemukan: {audio_path}"
         )
 
     file_size = audio_path.stat().st_size
@@ -101,28 +102,15 @@ def transcribe_audio(
         )
 
     print("=" * 60)
-    print("WHISPER TRANSCRIPTION")
+    print("WHISPER WORD-LEVEL TRANSCRIPTION")
     print("=" * 60)
 
-    print(
-        f"Input       : {audio_path}"
-    )
-
-    print(
-        f"File size   : {file_size:,} bytes"
-    )
-
-    print(
-        f"Model       : {MODEL_SIZE}"
-    )
-
-    print(
-        f"Device      : {DEVICE}"
-    )
-
-    print(
-        f"Compute     : {COMPUTE_TYPE}"
-    )
+    print(f"Input       : {audio_path}")
+    print(f"File size   : {file_size:,} bytes")
+    print(f"Model       : {MODEL_SIZE}")
+    print(f"Device      : {DEVICE}")
+    print(f"Compute     : {COMPUTE_TYPE}")
+    print(f"Word timing : ENABLED")
 
     # ========================================================
     # CACHE
@@ -135,8 +123,7 @@ def transcribe_audio(
     ):
 
         print(
-            f"Loading transcript cache: "
-            f"{cache_path}"
+            f"Loading transcript cache: {cache_path}"
         )
 
         with cache_path.open(
@@ -147,20 +134,21 @@ def transcribe_audio(
             return json.load(file)
 
     # ========================================================
-    # LOAD MODEL
+    # MODEL
     # ========================================================
 
     model = get_model()
 
     # ========================================================
-    # START TIMER
+    # TIMER
     # ========================================================
 
     start_time = time.perf_counter()
 
-    print(
-        "\nStarting local Whisper transcription..."
-    )
+    print()
+    print("Starting Faster-Whisper...")
+    print("Word-level timestamps sedang dibuat...")
+    print()
 
     # ========================================================
     # TRANSCRIBE
@@ -171,27 +159,42 @@ def transcribe_audio(
         str(audio_path),
 
         # Bahasa Indonesia
-        language="id",
+        language=LANGUAGE,
 
         # ====================================================
-        # SPEED OPTIMIZATION
+        # AKURASI
         # ====================================================
 
-        beam_size=1,
+        beam_size=BEAM_SIZE,
 
-        best_of=1,
+        best_of=BEST_OF,
 
-        # Jangan mempertahankan konteks terlalu agresif
-        # sehingga processing lebih cepat.
-        condition_on_previous_text=False,
+        temperature=0,
 
-        # Buang bagian yang tidak memiliki speech
+        # Pertahankan konteks antar segment
+        condition_on_previous_text=True,
+
+        # ====================================================
+        # VAD
+        # ====================================================
+
         vad_filter=True,
 
-        # Threshold VAD
         vad_parameters={
             "min_silence_duration_ms": 500,
         },
+
+        # ====================================================
+        # WORD TIMESTAMPS
+        # ====================================================
+
+        word_timestamps=True,
+
+        # ====================================================
+        # SPEECH SETTINGS
+        # ====================================================
+
+        without_timestamps=False,
     )
 
     # ========================================================
@@ -202,6 +205,12 @@ def transcribe_audio(
 
     full_text = []
 
+    total_words = 0
+
+    # ========================================================
+    # PROCESS SEGMENTS
+    # ========================================================
+
     for segment in segments:
 
         text = segment.text.strip()
@@ -209,17 +218,48 @@ def transcribe_audio(
         if not text:
             continue
 
+        # ----------------------------------------------------
+        # WORDS
+        # ----------------------------------------------------
+
+        words = []
+
+        if segment.words:
+
+            for word in segment.words:
+
+                word_text = word.word.strip()
+
+                if not word_text:
+                    continue
+
+                word_data = {
+                    "start": float(word.start),
+                    "end": float(word.end),
+                    "word": word_text,
+                }
+
+                # Probability jika tersedia
+                if word.probability is not None:
+
+                    word_data["probability"] = float(
+                        word.probability
+                    )
+
+                words.append(word_data)
+
+        total_words += len(words)
+
+        # ----------------------------------------------------
+        # SEGMENT
+        # ----------------------------------------------------
+
         result_segments.append(
             {
-                "start": float(
-                    segment.start
-                ),
-
-                "end": float(
-                    segment.end
-                ),
-
+                "start": float(segment.start),
+                "end": float(segment.end),
                 "text": text,
+                "words": words,
             }
         )
 
@@ -231,9 +271,7 @@ def transcribe_audio(
 
     result = {
 
-        "text": " ".join(
-            full_text
-        ),
+        "text": " ".join(full_text),
 
         "language": info.language,
 
@@ -241,47 +279,40 @@ def transcribe_audio(
             info.language_probability
         ),
 
-        "duration": float(
-            info.duration
-        )
+        "duration": float(info.duration)
         if info.duration
         else 0.0,
 
         "segments": result_segments,
+
+        "word_timestamps": True,
+
+        "word_count": total_words,
     }
 
     # ========================================================
     # TIME
     # ========================================================
 
-    elapsed = (
-        time.perf_counter()
-        - start_time
-    )
+    elapsed = time.perf_counter() - start_time
 
-    result[
-        "transcription_time"
-    ] = elapsed
+    result["transcription_time"] = elapsed
 
     # ========================================================
-    # REAL-TIME FACTOR
+    # REALTIME FACTOR
     # ========================================================
 
     duration = result["duration"]
 
     if duration > 0:
 
-        realtime_factor = (
-            elapsed / duration
-        )
+        realtime_factor = elapsed / duration
 
     else:
 
         realtime_factor = 0.0
 
-    result[
-        "realtime_factor"
-    ] = realtime_factor
+    result["realtime_factor"] = realtime_factor
 
     # ========================================================
     # SAVE CACHE
@@ -306,54 +337,42 @@ def transcribe_audio(
                 indent=2,
             )
 
-        print(
-            f"\n[OK] Transcript cache saved:"
-        )
-
-        print(
-            cache_path
-        )
+        print()
+        print("[OK] Transcript cache saved:")
+        print(cache_path)
 
     # ========================================================
     # STATISTICS
     # ========================================================
 
-    print("\n" + "=" * 60)
+    print()
+    print("=" * 60)
     print("TRANSCRIPTION COMPLETE")
     print("=" * 60)
 
     print(
-        f"Video duration : "
-        f"{duration:.2f} sec"
+        f"Video duration : {duration:.2f} sec"
     )
 
     print(
-        f"Processing     : "
-        f"{elapsed:.2f} sec"
+        f"Processing     : {elapsed:.2f} sec"
     )
 
     print(
-        f"Segments       : "
-        f"{len(result_segments)}"
+        f"Segments       : {len(result_segments)}"
     )
 
     print(
-        f"Realtime factor: "
-        f"{realtime_factor:.3f}x"
+        f"Words          : {total_words}"
     )
 
-    if realtime_factor <= 1:
+    print(
+        f"Realtime factor: {realtime_factor:.3f}x"
+    )
 
-        print(
-            "[FAST] Lebih cepat dari durasi video."
-        )
-
-    else:
-
-        print(
-            "[INFO] Processing lebih lambat "
-            "dari durasi video."
-        )
+    print(
+        "Word timestamps: ENABLED"
+    )
 
     print("=" * 60)
 
