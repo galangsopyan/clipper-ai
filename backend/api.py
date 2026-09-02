@@ -36,6 +36,7 @@ SOURCE_METADATA_FILE = CACHE_DIR / "source_metadata.json"
 MAX_CLIPS = 5
 
 MIN_VIDEO_SIZE = 1000
+MAX_UPLOAD_SIZE = 3 * 1024 * 1024 * 1024  # 3 GB
 
 
 # ============================================================

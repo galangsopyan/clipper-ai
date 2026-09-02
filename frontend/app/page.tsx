@@ -174,10 +174,10 @@ export default function Home() {
       return;
     }
 
-    const maxSize = 2 * 1024 * 1024 * 1024;
+    const maxSize = 3 * 1024 * 1024 * 1024;
 
     if (selectedFile.size > maxSize) {
-      setError("Ukuran video maksimal 2 GB.");
+      setError("Ukuran video maksimal 3 GB.");
       return;
     }
 
