@@ -36,9 +36,11 @@ if hasattr(
 # CONFIG
 # ============================================================
 
-BASE_DIR = Path(
-    __file__
-).resolve().parent
+BASE_DIR = (
+    Path(__file__)
+    .resolve()
+    .parent
+)
 
 MEDIA_DIR = (
     BASE_DIR / "media"
@@ -129,6 +131,7 @@ def load_json(
 ):
 
     if not file_path.exists():
+
         return None
 
     try:
@@ -143,7 +146,7 @@ def load_json(
     except Exception as e:
 
         print(
-            f"[WARNING] Gagal membaca JSON:"
+            "[WARNING] Gagal membaca JSON:"
         )
 
         print(
@@ -151,7 +154,8 @@ def load_json(
         )
 
         print(
-            f"[WARNING] {type(e).__name__}: {e}"
+            f"[WARNING] "
+            f"{type(e).__name__}: {e}"
         )
 
         return None
@@ -202,8 +206,10 @@ def find_valid_cache(
     video_hash: str,
 ):
 
-    cache_file = get_cache_file(
-        video_hash
+    cache_file = (
+        get_cache_file(
+            video_hash
+        )
     )
 
     if not cache_file.exists():
@@ -226,7 +232,8 @@ def find_valid_cache(
     ) != video_hash:
 
         print(
-            "[WARNING] Hash cache tidak cocok."
+            "[WARNING] "
+            "Hash cache tidak cocok."
         )
 
         return None
@@ -283,7 +290,8 @@ def create_transcript(
 
         print()
         print(
-            "[ERROR] Gagal import transcription service."
+            "[ERROR] "
+            "Gagal import transcription service."
         )
 
         print(
@@ -294,7 +302,9 @@ def create_transcript(
 
         raise
 
-    start_time = time.perf_counter()
+    start_time = (
+        time.perf_counter()
+    )
 
     try:
 
@@ -321,7 +331,8 @@ def create_transcript(
         print("=" * 70)
 
         print(
-            f"Error type : {type(e).__name__}"
+            f"Error type : "
+            f"{type(e).__name__}"
         )
 
         print(
@@ -329,10 +340,15 @@ def create_transcript(
         )
 
         print(
-            f"Elapsed    : {elapsed:.2f} sec"
+            f"Elapsed    : "
+            f"{elapsed:.2f} sec"
         )
 
         print()
+        print(
+            "FULL TRACEBACK:"
+        )
+
         traceback.print_exc()
 
         print("=" * 70)
@@ -392,7 +408,8 @@ def normalize_transcript(
         raise RuntimeError(
             "Format hasil transcription "
             "tidak dikenali. "
-            f"Type: {type(result).__name__}"
+            f"Type: "
+            f"{type(result).__name__}"
         )
 
     # --------------------------------------------------------
@@ -416,7 +433,8 @@ def normalize_transcript(
     if len(segments) == 0:
 
         raise RuntimeError(
-            "Whisper tidak menghasilkan segments."
+            "Whisper tidak menghasilkan "
+            "segments."
         )
 
     transcript_data[
@@ -502,7 +520,8 @@ def update_legacy_transcript(
     )
 
     print(
-        f"Legacy : {LEGACY_TRANSCRIPT_FILE}"
+        f"Legacy : "
+        f"{LEGACY_TRANSCRIPT_FILE}"
     )
 
 
@@ -512,7 +531,9 @@ def update_legacy_transcript(
 
 def main():
 
-    start_time = time.perf_counter()
+    start_time = (
+        time.perf_counter()
+    )
 
     print()
     print("=" * 70)
@@ -534,6 +555,24 @@ def main():
             VIDEO_FILE
         )
 
+        print()
+        print(
+            "Letakkan video di:"
+        )
+
+        print(
+            INPUT_DIR
+        )
+
+        print()
+        print(
+            "Nama file harus:"
+        )
+
+        print(
+            VIDEO_FILE.name
+        )
+
         sys.exit(1)
 
     # ========================================================
@@ -544,13 +583,22 @@ def main():
         VIDEO_FILE.stat().st_size
     )
 
+    if video_size <= 0:
+
+        print(
+            "[ERROR] File video kosong."
+        )
+
+        sys.exit(1)
+
     print()
     print(
         f"Video : {VIDEO_FILE}"
     )
 
     print(
-        f"Size  : {video_size:,} bytes"
+        f"Size  : "
+        f"{video_size:,} bytes"
     )
 
     # ========================================================
@@ -582,7 +630,8 @@ def main():
     )
 
     print(
-        f"Hash time: {hash_elapsed:.2f} detik"
+        f"Hash time: "
+        f"{hash_elapsed:.2f} detik"
     )
 
     # ========================================================
@@ -618,7 +667,8 @@ def main():
         print("=" * 70)
 
         print(
-            "Transcript video ini sudah tersedia."
+            "Transcript video ini "
+            "sudah tersedia."
         )
 
         print(
@@ -653,7 +703,8 @@ def main():
     print("=" * 70)
 
     print(
-        "Transcript video lama tidak digunakan."
+        "Transcript video lama "
+        "tidak digunakan."
     )
 
     print(
@@ -683,7 +734,8 @@ def main():
         )
 
         print(
-            f"Error type : {type(e).__name__}"
+            f"Error type : "
+            f"{type(e).__name__}"
         )
 
         print(
@@ -692,10 +744,8 @@ def main():
 
         print()
         print(
-            "TRACEBACK:"
+            "Periksa error di atas."
         )
-
-        traceback.print_exc()
 
         print("=" * 70)
 
@@ -705,11 +755,30 @@ def main():
     # NORMALIZE
     # ========================================================
 
-    transcript_data = (
-        normalize_transcript(
-            result
+    try:
+
+        transcript_data = (
+            normalize_transcript(
+                result
+            )
         )
-    )
+
+    except Exception as e:
+
+        print()
+        print("=" * 70)
+        print("TRANSCRIPT NORMALIZATION FAILED")
+        print("=" * 70)
+
+        print(
+            f"{type(e).__name__}: {e}"
+        )
+
+        traceback.print_exc()
+
+        print("=" * 70)
+
+        sys.exit(1)
 
     # ========================================================
     # METADATA
@@ -777,7 +846,8 @@ def main():
     ):
 
         raise RuntimeError(
-            "Cache transcript gagal diverifikasi."
+            "Cache transcript "
+            "gagal diverifikasi."
         )
 
     if verified_data.get(
@@ -802,10 +872,27 @@ def main():
     # VERIFY LEGACY
     # ========================================================
 
-    if not LEGACY_TRANSCRIPT_FILE.exists():
+    legacy_data = load_json(
+        LEGACY_TRANSCRIPT_FILE
+    )
+
+    if not isinstance(
+        legacy_data,
+        dict,
+    ):
 
         raise RuntimeError(
-            "Legacy transcript gagal dibuat."
+            "Legacy transcript "
+            "gagal diverifikasi."
+        )
+
+    if not legacy_data.get(
+        "segments"
+    ):
+
+        raise RuntimeError(
+            "Legacy transcript "
+            "tidak memiliki segments."
         )
 
     # ========================================================
@@ -823,23 +910,33 @@ def main():
     print("=" * 70)
 
     print(
-        f"Segments : {len(segments)}"
+        f"Segments : "
+        f"{len(segments)}"
     )
 
     print(
-        f"Hash     : {video_hash}"
+        f"Words    : "
+        f"{transcript_data.get('word_count', 0)}"
     )
 
     print(
-        f"Cache    : {cache_file}"
+        f"Hash     : "
+        f"{video_hash}"
     )
 
     print(
-        f"Legacy   : {LEGACY_TRANSCRIPT_FILE}"
+        f"Cache    : "
+        f"{cache_file}"
     )
 
     print(
-        f"Total    : {total_time:.2f} detik"
+        f"Legacy   : "
+        f"{LEGACY_TRANSCRIPT_FILE}"
+    )
+
+    print(
+        f"Total    : "
+        f"{total_time:.2f} detik"
     )
 
     print("=" * 70)
