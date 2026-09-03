@@ -515,7 +515,7 @@ def transcribe_audio(
             # PROGRESS
             # ------------------------------------------------
 
-            log_progress=True,
+            log_progress=False,
         )
 
         # ====================================================
