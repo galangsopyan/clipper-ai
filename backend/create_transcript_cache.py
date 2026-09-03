@@ -3,19 +3,29 @@ import hashlib
 import json
 import sys
 import time
+import traceback
 
 
 # ============================================================
-# UTF-8 WINDOWS
+# UTF-8
 # ============================================================
 
-if hasattr(sys.stdout, "reconfigure"):
+if hasattr(
+    sys.stdout,
+    "reconfigure",
+):
+
     sys.stdout.reconfigure(
         encoding="utf-8",
         errors="replace",
     )
 
-if hasattr(sys.stderr, "reconfigure"):
+
+if hasattr(
+    sys.stderr,
+    "reconfigure",
+):
+
     sys.stderr.reconfigure(
         encoding="utf-8",
         errors="replace",
@@ -26,15 +36,26 @@ if hasattr(sys.stderr, "reconfigure"):
 # CONFIG
 # ============================================================
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(
+    __file__
+).resolve().parent
 
-MEDIA_DIR = BASE_DIR / "media"
-INPUT_DIR = MEDIA_DIR / "input"
-CACHE_DIR = MEDIA_DIR / "cache"
+MEDIA_DIR = (
+    BASE_DIR / "media"
+)
 
-VIDEO_FILE = INPUT_DIR / "Podcast.mp4"
+INPUT_DIR = (
+    MEDIA_DIR / "input"
+)
 
-# File transcript yang digunakan oleh script lama
+CACHE_DIR = (
+    MEDIA_DIR / "cache"
+)
+
+VIDEO_FILE = (
+    INPUT_DIR / "Podcast.mp4"
+)
+
 LEGACY_TRANSCRIPT_FILE = (
     CACHE_DIR / "Podcast_transcript.json"
 )
@@ -62,15 +83,12 @@ CACHE_DIR.mkdir(
 def calculate_video_hash(
     video_file: Path,
 ) -> str:
-    """
-    Membuat SHA256 berdasarkan isi file video.
-
-    Video berbeda akan menghasilkan hash berbeda.
-    """
 
     sha256 = hashlib.sha256()
 
-    with video_file.open("rb") as file:
+    with video_file.open(
+        "rb"
+    ) as file:
 
         while True:
 
@@ -81,7 +99,9 @@ def calculate_video_hash(
             if not chunk:
                 break
 
-            sha256.update(chunk)
+            sha256.update(
+                chunk
+            )
 
     return sha256.hexdigest()
 
@@ -123,11 +143,15 @@ def load_json(
     except Exception as e:
 
         print(
-            f"[WARNING] Gagal membaca JSON: {file_path}"
+            f"[WARNING] Gagal membaca JSON:"
         )
 
         print(
-            f"[WARNING] {e}"
+            file_path
+        )
+
+        print(
+            f"[WARNING] {type(e).__name__}: {e}"
         )
 
         return None
@@ -141,20 +165,16 @@ def save_json(
     file_path: Path,
     data: dict,
 ):
-    """
-    Simpan JSON secara aman menggunakan temporary file.
-
-    Tujuannya menghindari file JSON setengah tertulis
-    apabila proses terganggu.
-    """
 
     file_path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    temp_file = file_path.with_suffix(
-        file_path.suffix + ".tmp"
+    temp_file = (
+        file_path.with_suffix(
+            file_path.suffix + ".tmp"
+        )
     )
 
     with temp_file.open(
@@ -169,8 +189,9 @@ def save_json(
             indent=2,
         )
 
-    # Replace file lama
-    temp_file.replace(file_path)
+    temp_file.replace(
+        file_path
+    )
 
 
 # ============================================================
@@ -180,15 +201,6 @@ def save_json(
 def find_valid_cache(
     video_hash: str,
 ):
-    """
-    Cari transcript cache berdasarkan hash video.
-
-    Cache hanya dianggap valid apabila:
-    - file ada
-    - JSON valid
-    - video_hash cocok
-    - segments tersedia
-    """
 
     cache_file = get_cache_file(
         video_hash
@@ -209,7 +221,6 @@ def find_valid_cache(
 
         return None
 
-    # Pastikan hash cocok
     if data.get(
         "video_hash"
     ) != video_hash:
@@ -220,7 +231,6 @@ def find_valid_cache(
 
         return None
 
-    # Pastikan transcript memiliki segments
     segments = data.get(
         "segments"
     )
@@ -247,10 +257,21 @@ def create_transcript(
     video_file: Path,
     cache_file: Path,
 ):
-    """
-    Menjalankan Faster-Whisper melalui
-    app.services.transcription.transcribe_audio().
-    """
+
+    print()
+    print("=" * 70)
+    print("CALLING TRANSCRIPTION SERVICE")
+    print("=" * 70)
+
+    print(
+        f"Video : {video_file}"
+    )
+
+    print(
+        f"Cache : {cache_file}"
+    )
+
+    print("=" * 70)
 
     try:
 
@@ -258,55 +279,75 @@ def create_transcript(
             transcribe_audio,
         )
 
-    except ImportError as e:
+    except Exception as e:
 
-        raise RuntimeError(
-            "Tidak dapat mengimport "
-            "transcribe_audio dari "
-            "app.services.transcription: "
-            f"{e}"
+        print()
+        print(
+            "[ERROR] Gagal import transcription service."
         )
 
-    print()
-    print("=" * 70)
-    print("WHISPER TRANSCRIPTION")
-    print("=" * 70)
+        print(
+            f"{type(e).__name__}: {e}"
+        )
 
-    print(
-        f"Input : {video_file}"
-    )
+        traceback.print_exc()
 
-    print(
-        f"Cache : {cache_file}"
-    )
-
-    print(
-        "Memulai Faster-Whisper..."
-    )
+        raise
 
     start_time = time.perf_counter()
 
-    # ========================================================
-    # FORCE TRUE
-    #
-    # Karena function ini hanya dipanggil ketika hash cache
-    # belum ditemukan, kita boleh memaksa transcription baru.
-    # ========================================================
+    try:
 
-    result = transcribe_audio(
-        audio_path=video_file,
-        cache_path=cache_file,
-        force=True,
-    )
+        result = transcribe_audio(
+
+            audio_path=video_file,
+
+            cache_path=cache_file,
+
+            force=True,
+
+        )
+
+    except Exception as e:
+
+        elapsed = (
+            time.perf_counter()
+            - start_time
+        )
+
+        print()
+        print("=" * 70)
+        print("CREATE TRANSCRIPT FAILED")
+        print("=" * 70)
+
+        print(
+            f"Error type : {type(e).__name__}"
+        )
+
+        print(
+            f"Error      : {e}"
+        )
+
+        print(
+            f"Elapsed    : {elapsed:.2f} sec"
+        )
+
+        print()
+        traceback.print_exc()
+
+        print("=" * 70)
+
+        raise
 
     elapsed = (
         time.perf_counter()
         - start_time
     )
 
+    print()
     print(
-        f"Transcription selesai dalam "
-        f"{elapsed:.2f} detik."
+        f"[OK] Transcription selesai "
+        f"dalam {elapsed:.2f} detik."
     )
 
     return result
@@ -375,8 +416,7 @@ def normalize_transcript(
     if len(segments) == 0:
 
         raise RuntimeError(
-            "Whisper selesai tetapi "
-            "tidak menghasilkan segments."
+            "Whisper tidak menghasilkan segments."
         )
 
     transcript_data[
@@ -415,28 +455,21 @@ def add_metadata(
     transcript_data[
         "generated_at"
     ] = time.strftime(
-        "%Y-%m-%d %H:%M:%S"
+        "%Y-%m-%d %H:%M:%S",
+        time.gmtime(),
     )
 
     return transcript_data
 
 
 # ============================================================
-# UPDATE LEGACY TRANSCRIPT
+# UPDATE LEGACY
 # ============================================================
 
 def update_legacy_transcript(
     cache_file: Path,
     video_hash: str,
 ):
-    """
-    Podcast_transcript.json selalu diarahkan ke transcript
-    video yang sedang aktif.
-
-    Ini penting karena beberapa script lama masih membaca:
-
-        media/cache/Podcast_transcript.json
-    """
 
     data = load_json(
         cache_file
@@ -451,13 +484,13 @@ def update_legacy_transcript(
             "Cache transcript tidak valid."
         )
 
-    data["video_hash"] = (
-        video_hash
-    )
+    data[
+        "video_hash"
+    ] = video_hash
 
-    data["video_file"] = (
-        VIDEO_FILE.name
-    )
+    data[
+        "video_file"
+    ] = VIDEO_FILE.name
 
     save_json(
         LEGACY_TRANSCRIPT_FILE,
@@ -492,6 +525,7 @@ def main():
 
     if not VIDEO_FILE.exists():
 
+        print()
         print(
             "[ERROR] Video tidak ditemukan:"
         )
@@ -506,7 +540,9 @@ def main():
     # VIDEO INFO
     # ========================================================
 
-    video_size = VIDEO_FILE.stat().st_size
+    video_size = (
+        VIDEO_FILE.stat().st_size
+    )
 
     print()
     print(
@@ -526,10 +562,14 @@ def main():
         "Menghitung fingerprint video..."
     )
 
-    hash_start = time.perf_counter()
+    hash_start = (
+        time.perf_counter()
+    )
 
-    video_hash = calculate_video_hash(
-        VIDEO_FILE
+    video_hash = (
+        calculate_video_hash(
+            VIDEO_FILE
+        )
     )
 
     hash_elapsed = (
@@ -549,8 +589,10 @@ def main():
     # CACHE PATH
     # ========================================================
 
-    cache_file = get_cache_file(
-        video_hash
+    cache_file = (
+        get_cache_file(
+            video_hash
+        )
     )
 
     print()
@@ -562,35 +604,27 @@ def main():
     # CACHE HIT
     # ========================================================
 
-    existing_cache = find_valid_cache(
-        video_hash
+    existing_cache = (
+        find_valid_cache(
+            video_hash
+        )
     )
 
     if existing_cache:
 
         print()
-        print(
-            "=" * 70
-        )
+        print("=" * 70)
+        print("CACHE HIT")
+        print("=" * 70)
 
         print(
-            "CACHE HIT"
-        )
-
-        print(
-            "=" * 70
-        )
-
-        print(
-            "Transcript untuk video ini sudah tersedia."
+            "Transcript video ini sudah tersedia."
         )
 
         print(
             f"Cache : {existing_cache}"
         )
 
-        # Pastikan legacy transcript menunjuk
-        # ke video yang sedang aktif.
         update_legacy_transcript(
             existing_cache,
             video_hash,
@@ -603,7 +637,8 @@ def main():
 
         print()
         print(
-            f"Selesai dalam {total_time:.2f} detik."
+            f"Selesai dalam "
+            f"{total_time:.2f} detik."
         )
 
         return
@@ -613,17 +648,9 @@ def main():
     # ========================================================
 
     print()
-    print(
-        "=" * 70
-    )
-
-    print(
-        "CACHE MISS - VIDEO BARU"
-    )
-
-    print(
-        "=" * 70
-    )
+    print("=" * 70)
+    print("CACHE MISS - VIDEO BARU")
+    print("=" * 70)
 
     print(
         "Transcript video lama tidak digunakan."
@@ -637,26 +664,62 @@ def main():
     # WHISPER
     # ========================================================
 
-    result = create_transcript(
-        VIDEO_FILE,
-        cache_file,
-    )
+    try:
+
+        result = create_transcript(
+            VIDEO_FILE,
+            cache_file,
+        )
+
+    except Exception as e:
+
+        print()
+        print("=" * 70)
+        print("JOB FAILED")
+        print("=" * 70)
+
+        print(
+            "create_transcript_cache.py gagal."
+        )
+
+        print(
+            f"Error type : {type(e).__name__}"
+        )
+
+        print(
+            f"Error      : {e}"
+        )
+
+        print()
+        print(
+            "TRACEBACK:"
+        )
+
+        traceback.print_exc()
+
+        print("=" * 70)
+
+        sys.exit(1)
 
     # ========================================================
     # NORMALIZE
     # ========================================================
 
-    transcript_data = normalize_transcript(
-        result
+    transcript_data = (
+        normalize_transcript(
+            result
+        )
     )
 
     # ========================================================
     # METADATA
     # ========================================================
 
-    transcript_data = add_metadata(
-        transcript_data,
-        video_hash,
+    transcript_data = (
+        add_metadata(
+            transcript_data,
+            video_hash,
+        )
     )
 
     segments = transcript_data[
@@ -682,7 +745,7 @@ def main():
     )
 
     # ========================================================
-    # SAVE LEGACY CACHE
+    # SAVE LEGACY
     # ========================================================
 
     print(
@@ -702,8 +765,10 @@ def main():
     # VERIFY HASH CACHE
     # ========================================================
 
-    verified_data = load_json(
-        cache_file
+    verified_data = (
+        load_json(
+            cache_file
+        )
     )
 
     if not isinstance(
@@ -785,4 +850,33 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-    main()
+
+    try:
+
+        main()
+
+    except KeyboardInterrupt:
+
+        print()
+        print(
+            "[ERROR] Process dihentikan."
+        )
+
+        sys.exit(130)
+
+    except Exception as e:
+
+        print()
+        print("=" * 70)
+        print("UNHANDLED ERROR")
+        print("=" * 70)
+
+        print(
+            f"{type(e).__name__}: {e}"
+        )
+
+        traceback.print_exc()
+
+        print("=" * 70)
+
+        sys.exit(1)
