@@ -19,7 +19,7 @@ import {
 
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://galangclipper.com";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 type JobStatus = {
   id: string;
