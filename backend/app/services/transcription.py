@@ -14,63 +14,25 @@ from faster_whisper import WhisperModel
 # CONFIG
 # ============================================================
 
-# Railway Variables:
-#
-# WHISPER_MODEL=base
-#
-# Pilihan:
-# tiny
-# base
-# small
-#
-# Untuk Railway CPU/RAM terbatas:
-# base direkomendasikan.
 MODEL_SIZE = os.getenv(
     "WHISPER_MODEL",
     "base",
-).strip()
-
-
-# ============================================================
-# DEVICE
-# ============================================================
+)
 
 DEVICE = os.getenv(
     "WHISPER_DEVICE",
     "cpu",
-).strip().lower()
+)
 
-
-# ============================================================
-# COMPUTE TYPE
-# ============================================================
-
-# CPU Railway:
-# int8
-#
-# Jika muncul masalah compatibility:
-# int8_float32
-#
-# Default menggunakan int8.
 COMPUTE_TYPE = os.getenv(
     "WHISPER_COMPUTE_TYPE",
     "int8",
-).strip()
-
-
-# ============================================================
-# LANGUAGE
-# ============================================================
+)
 
 LANGUAGE = os.getenv(
     "WHISPER_LANGUAGE",
     "id",
-).strip()
-
-
-# ============================================================
-# BEAM SIZE
-# ============================================================
+)
 
 BEAM_SIZE = int(
     os.getenv(
@@ -79,11 +41,6 @@ BEAM_SIZE = int(
     )
 )
 
-
-# ============================================================
-# BEST OF
-# ============================================================
-
 BEST_OF = int(
     os.getenv(
         "WHISPER_BEST_OF",
@@ -91,22 +48,12 @@ BEST_OF = int(
     )
 )
 
-
-# ============================================================
-# CPU THREADS
-# ============================================================
-
 CPU_THREADS = int(
     os.getenv(
         "WHISPER_CPU_THREADS",
         "4",
     )
 )
-
-
-# ============================================================
-# WORKERS
-# ============================================================
 
 NUM_WORKERS = int(
     os.getenv(
@@ -117,17 +64,29 @@ NUM_WORKERS = int(
 
 
 # ============================================================
-# HF TOKEN
+# HUGGING FACE
 # ============================================================
 
-# Token tidak diberikan ke WhisperModel().
-#
-# faster-whisper hanya membutuhkan nama model.
-#
-# Variabel ini tetap dibaca untuk logging/status saja.
 HF_TOKEN = os.getenv(
-    "HF_TOKEN",
+    "HF_TOKEN"
 )
+
+if HF_TOKEN:
+    print(
+        "[INFO] HF_TOKEN ditemukan."
+    )
+    print(
+        "[INFO] Hugging Face authentication aktif."
+    )
+else:
+    print(
+        "[WARNING] HF_TOKEN tidak ditemukan."
+    )
+
+    print(
+        "[WARNING] Model akan di-download "
+        "tanpa authentication."
+    )
 
 
 # ============================================================
@@ -138,57 +97,20 @@ _model: WhisperModel | None = None
 
 
 # ============================================================
-# UTILITY
-# ============================================================
-
-def _safe_float(
-    value: Any,
-    default: float = 0.0,
-) -> float:
-    """
-    Mengubah value menjadi float dengan aman.
-    """
-
-    try:
-
-        if value is None:
-            return default
-
-        return float(value)
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-
-        return default
-
-
-# ============================================================
 # LOAD MODEL
 # ============================================================
 
 def get_model() -> WhisperModel:
-    """
-    Load Faster-Whisper model.
-
-    Model hanya dibuat satu kali dan kemudian
-    disimpan di memory.
-    """
 
     global _model
 
     # --------------------------------------------------------
-    # RETURN CACHE
+    # MODEL SUDAH ADA
     # --------------------------------------------------------
 
     if _model is not None:
 
         return _model
-
-    # --------------------------------------------------------
-    # HEADER
-    # --------------------------------------------------------
 
     print()
     print("=" * 70)
@@ -216,10 +138,6 @@ def get_model() -> WhisperModel:
     )
 
     print(
-        f"Language       : {LANGUAGE}"
-    )
-
-    print(
         f"Beam size      : {BEAM_SIZE}"
     )
 
@@ -228,40 +146,34 @@ def get_model() -> WhisperModel:
     )
 
     print(
-        f"HF Token       : "
-        f"{'YES' if HF_TOKEN else 'NO'}"
+        f"Language       : {LANGUAGE}"
+    )
+
+    print(
+        f"HF Token       : {'YES' if HF_TOKEN else 'NO'}"
     )
 
     print("=" * 70)
 
     start_time = time.perf_counter()
 
-    # --------------------------------------------------------
-    # LOAD
-    # --------------------------------------------------------
-
     try:
 
-        print()
-        print(
-            "[INFO] Membuat WhisperModel..."
-        )
-
         # ====================================================
-        # PENTING
+        # IMPORTANT
         # ====================================================
         #
-        # JANGAN gunakan:
+        # JANGAN memasukkan:
         #
         # token=HF_TOKEN
         #
-        # karena pada kombinasi versi package kamu,
-        # token tersebut diteruskan ke CTranslate2
-        # dan menyebabkan:
+        # ke WhisperModel.
         #
-        # TypeError:
-        # incompatible constructor arguments
+        # HF_TOKEN sudah dibaca oleh huggingface_hub
+        # melalui environment variable.
         #
+        # token tersebut tidak boleh diteruskan ke
+        # ctranslate2.
         # ====================================================
 
         _model = WhisperModel(
@@ -271,41 +183,6 @@ def get_model() -> WhisperModel:
             cpu_threads=CPU_THREADS,
             num_workers=NUM_WORKERS,
         )
-
-    except TypeError as e:
-
-        print()
-        print("=" * 70)
-        print("WHISPER CONSTRUCTOR ERROR")
-        print("=" * 70)
-
-        print(
-            f"{type(e).__name__}: {e}"
-        )
-
-        print()
-
-        traceback.print_exc()
-
-        print()
-        print(
-            "[ERROR] Faster-Whisper gagal membuat model."
-        )
-
-        print(
-            "[ERROR] Periksa versi faster-whisper "
-            "dan ctranslate2."
-        )
-
-        print("=" * 70)
-
-        raise RuntimeError(
-            "Faster-Whisper gagal membuat model. "
-            "Pastikan token tidak dikirim ke "
-            "WhisperModel() dan gunakan kombinasi "
-            "versi faster-whisper/ctranslate2 "
-            "yang kompatibel."
-        ) from e
 
     except Exception as e:
 
@@ -323,18 +200,36 @@ def get_model() -> WhisperModel:
         )
 
         print()
+        print(
+            "Kemungkinan masalah:"
+        )
+
+        print(
+            "1. Model Whisper gagal di-download."
+        )
+
+        print(
+            "2. Versi faster-whisper / ctranslate2 tidak cocok."
+        )
+
+        print(
+            "3. Compute type tidak didukung."
+        )
+
+        print(
+            "4. HF_TOKEN bermasalah."
+        )
+
+        print()
+        print(
+            "FULL TRACEBACK:"
+        )
 
         traceback.print_exc()
 
         print("=" * 70)
 
-        raise RuntimeError(
-            f"Gagal memuat Faster-Whisper model: {e}"
-        ) from e
-
-    # --------------------------------------------------------
-    # TIMER
-    # --------------------------------------------------------
+        raise
 
     elapsed = (
         time.perf_counter()
@@ -342,24 +237,9 @@ def get_model() -> WhisperModel:
     )
 
     print()
-    print("=" * 70)
-    print("WHISPER MODEL READY")
-    print("=" * 70)
-
     print(
-        f"[OK] Model loaded in {elapsed:.2f} seconds."
-    )
-
-    print(
-        f"Model          : {MODEL_SIZE}"
-    )
-
-    print(
-        f"Device         : {DEVICE}"
-    )
-
-    print(
-        f"Compute type   : {COMPUTE_TYPE}"
+        f"[OK] Whisper model loaded "
+        f"in {elapsed:.2f} seconds."
     )
 
     print("=" * 70)
@@ -368,7 +248,7 @@ def get_model() -> WhisperModel:
 
 
 # ============================================================
-# TRANSCRIBE AUDIO
+# TRANSCRIBE
 # ============================================================
 
 def transcribe_audio(
@@ -376,41 +256,19 @@ def transcribe_audio(
     cache_path: Path | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
-    """
-    Transcribe audio/video menggunakan Faster-Whisper.
-
-    Features:
-    - Bahasa Indonesia
-    - Word timestamps
-    - VAD
-    - Cache JSON
-    - Progress logging
-    - Realtime factor
-    """
 
     # ========================================================
-    # NORMALIZE PATH
+    # VALIDATE
     # ========================================================
 
     audio_path = Path(
         audio_path
     )
 
-    # ========================================================
-    # VALIDATE FILE
-    # ========================================================
-
     if not audio_path.exists():
 
         raise FileNotFoundError(
-            f"Audio/video tidak ditemukan: "
-            f"{audio_path}"
-        )
-
-    if not audio_path.is_file():
-
-        raise RuntimeError(
-            f"Path bukan file: {audio_path}"
+            f"Audio/video tidak ditemukan: {audio_path}"
         )
 
     file_size = audio_path.stat().st_size
@@ -431,27 +289,27 @@ def transcribe_audio(
     print("=" * 70)
 
     print(
-        f"Input           : {audio_path}"
+        f"Input          : {audio_path}"
     )
 
     print(
-        f"File size       : {file_size:,} bytes"
+        f"File size      : {file_size:,} bytes"
     )
 
     print(
-        f"Model           : {MODEL_SIZE}"
+        f"Model          : {MODEL_SIZE}"
     )
 
     print(
-        f"Device          : {DEVICE}"
+        f"Device         : {DEVICE}"
     )
 
     print(
-        f"Compute         : {COMPUTE_TYPE}"
+        f"Compute        : {COMPUTE_TYPE}"
     )
 
     print(
-        f"Language        : {LANGUAGE}"
+        f"Language       : {LANGUAGE}"
     )
 
     print(
@@ -474,87 +332,43 @@ def transcribe_audio(
 
     if (
         cache_path is not None
-        and Path(cache_path).exists()
+        and cache_path.exists()
         and not force
     ):
 
-        cache_path = Path(
-            cache_path
-        )
-
-        print()
         print(
             "[CACHE] Loading transcript cache..."
         )
 
-        try:
+        with cache_path.open(
+            "r",
+            encoding="utf-8",
+        ) as file:
 
-            with cache_path.open(
-                "r",
-                encoding="utf-8",
-            ) as file:
+            data = json.load(file)
 
-                data = json.load(file)
-
-        except json.JSONDecodeError as e:
-
-            print(
-                "[WARNING] Cache JSON rusak."
-            )
-
-            print(
-                f"[WARNING] {e}"
-            )
-
-            print(
-                "[WARNING] Melakukan transcription ulang."
-            )
-
-            data = None
-
-        except OSError as e:
-
-            print(
-                "[WARNING] Tidak dapat membaca cache."
-            )
-
-            print(
-                f"[WARNING] {e}"
-            )
-
-            data = None
-
-        if isinstance(
+        if not isinstance(
             data,
             dict,
         ):
 
-            segments = data.get(
-                "segments"
+            raise RuntimeError(
+                "Transcript cache bukan object JSON."
             )
 
-            if segments:
+        if not data.get(
+            "segments"
+        ):
 
-                print(
-                    "[OK] Transcript cache loaded."
-                )
-
-                print(
-                    f"[CACHE] Segments: "
-                    f"{len(segments)}"
-                )
-
-                print("=" * 70)
-
-                return data
-
-            print(
-                "[WARNING] Cache tidak memiliki segments."
+            raise RuntimeError(
+                "Transcript cache tidak memiliki segments."
             )
 
-            print(
-                "[WARNING] Melakukan transcription ulang."
-            )
+        print(
+            "[OK] Transcript cache loaded."
+        )
+
+        return data
 
     # ========================================================
     # LOAD MODEL
@@ -567,10 +381,6 @@ def transcribe_audio(
     # ========================================================
 
     start_time = time.perf_counter()
-
-    # ========================================================
-    # HEADER
-    # ========================================================
 
     print()
     print("=" * 70)
@@ -585,22 +395,13 @@ def transcribe_audio(
         "Jangan menghentikan proses."
     )
 
-    print()
-    print(
-        "Word-level timestamps : ENABLED"
-    )
-
-    print(
-        "VAD                   : ENABLED"
-    )
-
     print("=" * 70)
 
-    # ========================================================
-    # TRANSCRIBE
-    # ========================================================
-
     try:
+
+        # ====================================================
+        # TRANSCRIBE
+        # ====================================================
 
         segments, info = model.transcribe(
 
@@ -613,26 +414,14 @@ def transcribe_audio(
             language=LANGUAGE,
 
             # ------------------------------------------------
-            # BEAM SEARCH
+            # ACCURACY
             # ------------------------------------------------
 
             beam_size=BEAM_SIZE,
 
-            # ------------------------------------------------
-            # BEST OF
-            # ------------------------------------------------
-
             best_of=BEST_OF,
 
-            # ------------------------------------------------
-            # TEMPERATURE
-            # ------------------------------------------------
-
             temperature=0,
-
-            # ------------------------------------------------
-            # CONTEXT
-            # ------------------------------------------------
 
             condition_on_previous_text=True,
 
@@ -660,14 +449,12 @@ def transcribe_audio(
         )
 
         # ====================================================
-        # RESULT CONTAINERS
+        # BUILD RESULT
         # ====================================================
 
-        result_segments: list[
-            dict[str, Any]
-        ] = []
+        result_segments = []
 
-        full_text: list[str] = []
+        full_text = []
 
         total_words = 0
 
@@ -681,77 +468,37 @@ def transcribe_audio(
 
             segment_number += 1
 
-            # ------------------------------------------------
-            # TEXT
-            # ------------------------------------------------
-
             text = (
-                segment.text or ""
-            ).strip()
-
-            if not text:
-
-                continue
-
-            # ------------------------------------------------
-            # WORDS
-            # ------------------------------------------------
-
-            words: list[
-                dict[str, Any]
-            ] = []
-
-            segment_words = getattr(
-                segment,
-                "words",
-                None,
+                segment.text
+                .strip()
             )
 
-            if segment_words:
+            if not text:
+                continue
 
-                for word in segment_words:
+            words = []
+
+            if segment.words:
+
+                for word in segment.words:
 
                     word_text = (
-                        getattr(
-                            word,
-                            "word",
-                            "",
-                        )
-                        or ""
-                    ).strip()
+                        word.word
+                        .strip()
+                    )
 
                     if not word_text:
-
                         continue
 
-                    word_start = _safe_float(
-                        getattr(
-                            word,
-                            "start",
-                            None,
-                        )
-                    )
-
-                    word_end = _safe_float(
-                        getattr(
-                            word,
-                            "end",
-                            None,
-                        )
-                    )
-
-                    word_data: dict[
-                        str,
-                        Any,
-                    ] = {
-                        "start": word_start,
-                        "end": word_end,
+                    word_data = {
+                        "start": float(
+                            word.start
+                        ),
+                        "end": float(
+                            word.end
+                        ),
                         "word": word_text,
                     }
-
-                    # ----------------------------------------
-                    # PROBABILITY
-                    # ----------------------------------------
 
                     probability = getattr(
                         word,
@@ -763,7 +510,7 @@ def transcribe_audio(
 
                         word_data[
                             "probability"
-                        ] = _safe_float(
+                        ] = float(
                             probability
                         )
 
@@ -771,55 +518,30 @@ def transcribe_audio(
                         word_data
                     )
 
-            # ------------------------------------------------
-            # TOTAL WORDS
-            # ------------------------------------------------
-
             total_words += len(
                 words
             )
 
-            # ------------------------------------------------
-            # SEGMENT DATA
-            # ------------------------------------------------
-
-            segment_data: dict[
-                str,
-                Any,
-            ] = {
-
-                "start": _safe_float(
-                    getattr(
-                        segment,
-                        "start",
-                        None,
-                    )
-                ),
-
-                "end": _safe_float(
-                    getattr(
-                        segment,
-                        "end",
-                        None,
-                    )
-                ),
-
-                "text": text,
-
-                "words": words,
-            }
-
             result_segments.append(
-                segment_data
+                {
+                    "start": float(
+                        segment.start
+                    ),
+                    "end": float(
+                        segment.end
+                    ),
+                    "text": text,
+                    "words": words,
+                }
             )
 
             full_text.append(
                 text
             )
 
-            # =================================================
-            # PROGRESS
-            # =================================================
+            # ------------------------------------------------
+            # Progress
+            # ------------------------------------------------
 
             if segment_number % 10 == 0:
 
@@ -839,7 +561,9 @@ def transcribe_audio(
         # VALIDATE
         # ====================================================
 
-        if not result_segments:
+        if len(
+            result_segments
+        ) == 0:
 
             raise RuntimeError(
                 "Whisper selesai tetapi "
@@ -856,48 +580,39 @@ def transcribe_audio(
             LANGUAGE,
         )
 
-        if not detected_language:
-
-            detected_language = LANGUAGE
-
-        language_probability = _safe_float(
-            getattr(
-                info,
-                "language_probability",
-                None,
-            )
+        language_probability = getattr(
+            info,
+            "language_probability",
+            0.0,
         )
 
-        duration = _safe_float(
-            getattr(
-                info,
-                "duration",
-                None,
-            )
+        duration = getattr(
+            info,
+            "duration",
+            0.0,
         )
-
-        # ====================================================
-        # FULL TEXT
-        # ====================================================
-
-        combined_text = " ".join(
-            full_text
-        ).strip()
 
         # ====================================================
         # RESULT
         # ====================================================
 
-        result: dict[str, Any] = {
+        result = {
 
-            "text": combined_text,
+            "text": " ".join(
+                full_text
+            ),
 
             "language": detected_language,
 
-            "language_probability":
-                language_probability,
+            "language_probability": float(
+                language_probability
+            ),
 
-            "duration": duration,
+            "duration": float(
+                duration
+            )
+            if duration
+            else 0.0,
 
             "segments": result_segments,
 
@@ -907,7 +622,7 @@ def transcribe_audio(
         }
 
         # ====================================================
-        # PROCESSING TIME
+        # TIME
         # ====================================================
 
         elapsed = (
@@ -922,6 +637,10 @@ def transcribe_audio(
         # ====================================================
         # REALTIME FACTOR
         # ====================================================
+
+        duration = result[
+            "duration"
+        ]
 
         if duration > 0:
 
@@ -952,62 +671,34 @@ def transcribe_audio(
                 exist_ok=True,
             )
 
-            # ----------------------------------------------
-            # Temporary cache
-            # ----------------------------------------------
-
             temp_path = cache_path.with_suffix(
                 cache_path.suffix + ".tmp"
             )
 
-            try:
+            with temp_path.open(
+                "w",
+                encoding="utf-8",
+            ) as file:
 
-                with temp_path.open(
-                    "w",
-                    encoding="utf-8",
-                ) as file:
-
-                    json.dump(
-                        result,
-                        file,
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-
-                # ------------------------------------------
-                # Atomic replace
-                # ------------------------------------------
-
-                temp_path.replace(
-                    cache_path
+                json.dump(
+                    result,
+                    file,
+                    ensure_ascii=False,
+                    indent=2,
                 )
 
-                print()
-                print(
-                    "[OK] Transcript cache saved:"
-                )
+            temp_path.replace(
+                cache_path
+            )
 
-                print(
-                    cache_path
-                )
+            print()
+            print(
+                "[OK] Transcript cache saved:"
+            )
 
-            except Exception:
-
-                # ------------------------------------------
-                # Cleanup temporary file
-                # ------------------------------------------
-
-                try:
-
-                    temp_path.unlink(
-                        missing_ok=True
-                    )
-
-                except Exception:
-
-                    pass
-
-                raise
+            print(
+                cache_path
+            )
 
         # ====================================================
         # COMPLETE
@@ -1019,38 +710,27 @@ def transcribe_audio(
         print("=" * 70)
 
         print(
-            f"Video duration  : "
-            f"{duration:.2f} sec"
+            f"Video duration  : {duration:.2f} sec"
         )
 
         print(
-            f"Processing      : "
-            f"{elapsed:.2f} sec"
+            f"Processing      : {elapsed:.2f} sec"
         )
 
         print(
-            f"Segments        : "
-            f"{len(result_segments)}"
+            f"Segments        : {len(result_segments)}"
         )
 
         print(
-            f"Words           : "
-            f"{total_words}"
+            f"Words           : {total_words}"
         )
 
         print(
-            f"Realtime factor : "
-            f"{realtime_factor:.3f}x"
+            f"Realtime factor : {realtime_factor:.3f}x"
         )
 
         print(
-            f"Language        : "
-            f"{detected_language}"
-        )
-
-        print(
-            f"Language prob.  : "
-            f"{language_probability:.4f}"
+            f"Language        : {detected_language}"
         )
 
         print(
@@ -1060,10 +740,6 @@ def transcribe_audio(
         print("=" * 70)
 
         return result
-
-    # ========================================================
-    # ERROR
-    # ========================================================
 
     except Exception as e:
 
@@ -1078,8 +754,7 @@ def transcribe_audio(
         print("=" * 70)
 
         print(
-            f"Error type : "
-            f"{type(e).__name__}"
+            f"Error type : {type(e).__name__}"
         )
 
         print(
@@ -1087,8 +762,7 @@ def transcribe_audio(
         )
 
         print(
-            f"Elapsed    : "
-            f"{elapsed:.2f} sec"
+            f"Elapsed    : {elapsed:.2f} sec"
         )
 
         print()
