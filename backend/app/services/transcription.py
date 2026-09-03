@@ -38,21 +38,21 @@ LANGUAGE = os.getenv(
 BEAM_SIZE = int(
     os.getenv(
         "WHISPER_BEAM_SIZE",
-        "5",
+        "1",
     )
 )
 
 BEST_OF = int(
     os.getenv(
         "WHISPER_BEST_OF",
-        "5",
+        "1",
     )
 )
 
 CPU_THREADS = int(
     os.getenv(
         "WHISPER_CPU_THREADS",
-        "4",
+        "2",
     )
 )
 

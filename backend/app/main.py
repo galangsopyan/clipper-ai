@@ -23,7 +23,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "https://clipper-ai-azure.vercel.app/",
+        "https://clipper-ai-azure.vercel.app",
 
         # Tambahkan domain frontend Vercel kamu di sini
         # contoh:
