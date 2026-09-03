@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
 import json
 import os
 import time
@@ -72,32 +73,32 @@ HF_TOKEN = os.getenv(
 )
 
 if HF_TOKEN:
+
     print(
         "[INFO] HF_TOKEN ditemukan."
     )
-    print(
-        "[INFO] Hugging Face authentication aktif."
-    )
+
 else:
+
     print(
-        "[WARNING] HF_TOKEN tidak ditemukan."
+        "[INFO] HF_TOKEN tidak tersedia."
     )
 
     print(
-        "[WARNING] Model akan di-download "
-        "tanpa authentication."
+        "[INFO] Model akan menggunakan download "
+        "tanpa autentikasi jika diperlukan."
     )
 
 
 # ============================================================
-# MODEL CACHE
+# MODEL
 # ============================================================
 
 _model: WhisperModel | None = None
 
 
 # ============================================================
-# LOAD MODEL
+# GET MODEL
 # ============================================================
 
 def get_model() -> WhisperModel:
@@ -105,7 +106,7 @@ def get_model() -> WhisperModel:
     global _model
 
     # --------------------------------------------------------
-    # MODEL SUDAH ADA
+    # Jangan load ulang model
     # --------------------------------------------------------
 
     if _model is not None:
@@ -138,19 +139,8 @@ def get_model() -> WhisperModel:
     )
 
     print(
-        f"Beam size      : {BEAM_SIZE}"
-    )
-
-    print(
-        f"Best of        : {BEST_OF}"
-    )
-
-    print(
-        f"Language       : {LANGUAGE}"
-    )
-
-    print(
-        f"HF Token       : {'YES' if HF_TOKEN else 'NO'}"
+        f"HF Token       : "
+        f"{'YES' if HF_TOKEN else 'NO'}"
     )
 
     print("=" * 70)
@@ -160,29 +150,96 @@ def get_model() -> WhisperModel:
     try:
 
         # ====================================================
-        # IMPORTANT
+        # PENTING
         # ====================================================
         #
-        # JANGAN memasukkan:
+        # JANGAN menggunakan:
         #
         # token=HF_TOKEN
         #
-        # ke WhisperModel.
+        # karena token tersebut dapat diteruskan ke
+        # ctranslate2 dan menyebabkan:
         #
-        # HF_TOKEN sudah dibaca oleh huggingface_hub
-        # melalui environment variable.
+        # TypeError:
+        # incompatible constructor arguments
         #
-        # token tersebut tidak boleh diteruskan ke
-        # ctranslate2.
+        # Gunakan:
+        #
+        # use_auth_token=HF_TOKEN
+        #
         # ====================================================
+
+        model_kwargs = {
+            "device": DEVICE,
+            "compute_type": COMPUTE_TYPE,
+            "cpu_threads": CPU_THREADS,
+            "num_workers": NUM_WORKERS,
+        }
+
+        # ----------------------------------------------------
+        # Hugging Face authentication
+        # ----------------------------------------------------
+
+        if HF_TOKEN:
+
+            model_kwargs[
+                "use_auth_token"
+            ] = HF_TOKEN
+
+        # ----------------------------------------------------
+        # Load model
+        # ----------------------------------------------------
 
         _model = WhisperModel(
             MODEL_SIZE,
-            device=DEVICE,
-            compute_type=COMPUTE_TYPE,
-            cpu_threads=CPU_THREADS,
-            num_workers=NUM_WORKERS,
+            **model_kwargs,
         )
+
+    except TypeError as e:
+
+        print()
+        print("=" * 70)
+        print("FASTER-WHISPER TYPE ERROR")
+        print("=" * 70)
+
+        print(
+            str(e)
+        )
+
+        print()
+
+        print(
+            "Kemungkinan besar ada parameter yang "
+            "tidak kompatibel dengan CTranslate2."
+        )
+
+        print()
+
+        print(
+            "Pastikan tidak ada kode:"
+        )
+
+        print(
+            "token=HF_TOKEN"
+        )
+
+        print()
+
+        print(
+            "Gunakan:"
+        )
+
+        print(
+            "use_auth_token=HF_TOKEN"
+        )
+
+        print()
+
+        traceback.print_exc()
+
+        print("=" * 70)
+
+        raise
 
     except Exception as e:
 
@@ -200,30 +257,6 @@ def get_model() -> WhisperModel:
         )
 
         print()
-        print(
-            "Kemungkinan masalah:"
-        )
-
-        print(
-            "1. Model Whisper gagal di-download."
-        )
-
-        print(
-            "2. Versi faster-whisper / ctranslate2 tidak cocok."
-        )
-
-        print(
-            "3. Compute type tidak didukung."
-        )
-
-        print(
-            "4. HF_TOKEN bermasalah."
-        )
-
-        print()
-        print(
-            "FULL TRACEBACK:"
-        )
 
         traceback.print_exc()
 
@@ -237,9 +270,24 @@ def get_model() -> WhisperModel:
     )
 
     print()
+    print("=" * 70)
+    print("WHISPER MODEL LOADED")
+    print("=" * 70)
+
     print(
-        f"[OK] Whisper model loaded "
-        f"in {elapsed:.2f} seconds."
+        f"Model      : {MODEL_SIZE}"
+    )
+
+    print(
+        f"Device     : {DEVICE}"
+    )
+
+    print(
+        f"Compute    : {COMPUTE_TYPE}"
+    )
+
+    print(
+        f"Load time  : {elapsed:.2f} sec"
     )
 
     print("=" * 70)
@@ -248,7 +296,7 @@ def get_model() -> WhisperModel:
 
 
 # ============================================================
-# TRANSCRIBE
+# TRANSCRIBE AUDIO
 # ============================================================
 
 def transcribe_audio(
@@ -313,15 +361,15 @@ def transcribe_audio(
     )
 
     print(
-        "Word timing     : ENABLED"
+        "Word timing    : ENABLED"
     )
 
     print(
-        f"Cache           : {cache_path}"
+        f"Cache          : {cache_path}"
     )
 
     print(
-        f"Force           : {force}"
+        f"Force          : {force}"
     )
 
     print("=" * 70)
@@ -340,35 +388,45 @@ def transcribe_audio(
             "[CACHE] Loading transcript cache..."
         )
 
-        with cache_path.open(
-            "r",
-            encoding="utf-8",
-        ) as file:
+        try:
 
-            data = json.load(file)
+            with cache_path.open(
+                "r",
+                encoding="utf-8",
+            ) as file:
 
-        if not isinstance(
-            data,
-            dict,
-        ):
+                data = json.load(
+                    file
+                )
 
-            raise RuntimeError(
-                "Transcript cache bukan object JSON."
+        except Exception as e:
+
+            print(
+                "[WARNING] Cache rusak."
             )
 
-        if not data.get(
+            print(
+                f"{type(e).__name__}: {e}"
+            )
+
+            data = None
+
+        if isinstance(
+            data,
+            dict,
+        ) and data.get(
             "segments"
         ):
 
-            raise RuntimeError(
-                "Transcript cache tidak memiliki segments."
+            print(
+                "[OK] Transcript cache loaded."
             )
 
-        print(
-            "[OK] Transcript cache loaded."
-        )
+            return data
 
-        return data
+        print(
+            "[WARNING] Cache tidak valid."
+        )
 
     # ========================================================
     # LOAD MODEL
@@ -414,6 +472,12 @@ def transcribe_audio(
             language=LANGUAGE,
 
             # ------------------------------------------------
+            # TASK
+            # ------------------------------------------------
+
+            task="transcribe",
+
+            # ------------------------------------------------
             # ACCURACY
             # ------------------------------------------------
 
@@ -446,6 +510,12 @@ def transcribe_audio(
             # ------------------------------------------------
 
             without_timestamps=False,
+
+            # ------------------------------------------------
+            # PROGRESS
+            # ------------------------------------------------
+
+            log_progress=True,
         )
 
         # ====================================================
@@ -470,10 +540,11 @@ def transcribe_audio(
 
             text = (
                 segment.text
-                .strip()
-            )
+                or ""
+            ).strip()
 
             if not text:
+
                 continue
 
             words = []
@@ -484,10 +555,11 @@ def transcribe_audio(
 
                     word_text = (
                         word.word
-                        .strip()
-                    )
+                        or ""
+                    ).strip()
 
                     if not word_text:
+
                         continue
 
                     word_data = {
@@ -551,7 +623,7 @@ def transcribe_audio(
                 )
 
                 print(
-                    f"[TRANSCRIBE] "
+                    "[TRANSCRIBE] "
                     f"Segments={segment_number} "
                     f"Words={total_words} "
                     f"Elapsed={elapsed:.1f}s"
@@ -561,13 +633,11 @@ def transcribe_audio(
         # VALIDATE
         # ====================================================
 
-        if len(
-            result_segments
-        ) == 0:
+        if not result_segments:
 
             raise RuntimeError(
-                "Whisper selesai tetapi "
-                "tidak menghasilkan segment."
+                "Whisper selesai tetapi tidak "
+                "menghasilkan segment."
             )
 
         # ====================================================
@@ -592,6 +662,10 @@ def transcribe_audio(
             0.0,
         )
 
+        duration = float(
+            duration or 0.0
+        )
+
         # ====================================================
         # RESULT
         # ====================================================
@@ -605,14 +679,10 @@ def transcribe_audio(
             "language": detected_language,
 
             "language_probability": float(
-                language_probability
+                language_probability or 0.0
             ),
 
-            "duration": float(
-                duration
-            )
-            if duration
-            else 0.0,
+            "duration": duration,
 
             "segments": result_segments,
 
@@ -622,7 +692,7 @@ def transcribe_audio(
         }
 
         # ====================================================
-        # TIME
+        # PROCESSING TIME
         # ====================================================
 
         elapsed = (
@@ -637,10 +707,6 @@ def transcribe_audio(
         # ====================================================
         # REALTIME FACTOR
         # ====================================================
-
-        duration = result[
-            "duration"
-        ]
 
         if duration > 0:
 
@@ -718,7 +784,8 @@ def transcribe_audio(
         )
 
         print(
-            f"Segments        : {len(result_segments)}"
+            f"Segments        : "
+            f"{len(result_segments)}"
         )
 
         print(
@@ -726,11 +793,13 @@ def transcribe_audio(
         )
 
         print(
-            f"Realtime factor : {realtime_factor:.3f}x"
+            f"Realtime factor : "
+            f"{realtime_factor:.3f}x"
         )
 
         print(
-            f"Language        : {detected_language}"
+            f"Language        : "
+            f"{detected_language}"
         )
 
         print(
@@ -740,6 +809,10 @@ def transcribe_audio(
         print("=" * 70)
 
         return result
+
+    # ========================================================
+    # ERROR
+    # ========================================================
 
     except Exception as e:
 
