@@ -1091,7 +1091,7 @@ def download_video_from_url(
         "--socket-timeout",
         "60",
 
-        "--continued",
+        "--continue",
 
         "-o",
         str(output_template),
