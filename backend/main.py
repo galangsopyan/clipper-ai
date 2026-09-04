@@ -9,6 +9,8 @@ import uuid
 import time
 import re
 import os
+import base64
+import tempfile
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -987,6 +989,75 @@ def download_video_from_url(
         / f"{prefix}.%(ext)s"
     )
 
+    # ========================================================
+    # YOUTUBE COOKIES
+    # ========================================================
+
+    cookie_file = None
+
+    cookies_b64 = os.getenv(
+        "YOUTUBE_COOKIES_B64"
+    )
+
+    if cookies_b64:
+
+        try:
+
+            # Hapus whitespace/newline dari Base64
+            cookies_b64 = "".join(
+                cookies_b64.split()
+            )
+
+            cookie_bytes = base64.b64decode(
+                cookies_b64,
+                validate=True,
+            )
+
+            # Validasi sederhana:
+            # cookies.txt Netscape biasanya merupakan
+            # file text dan mengandung header/comment.
+            if not cookie_bytes:
+
+                raise ValueError(
+                    "Cookie data kosong."
+                )
+
+            cookie_file = (
+                Path(tempfile.gettempdir())
+                / f"clipforge_youtube_{download_id}.txt"
+            )
+
+            cookie_file.write_bytes(
+                cookie_bytes
+            )
+
+            print(
+                "[OK] YouTube cookies : ENABLED"
+            )
+
+        except Exception as e:
+
+            print(
+                "[WARNING] Gagal decode "
+                "YOUTUBE_COOKIES_B64:"
+            )
+
+            print(
+                str(e)
+            )
+
+            cookie_file = None
+
+    else:
+
+        print(
+            "[WARNING] YouTube cookies : NOT CONFIGURED"
+        )
+
+    # ========================================================
+    # BUILD YT-DLP COMMAND
+    # ========================================================
+
     command = [
         sys.executable,
         "-m",
@@ -994,264 +1065,337 @@ def download_video_from_url(
 
         "--no-playlist",
 
+        # YouTube JavaScript challenge support
+        "--js-runtimes",
+        "deno",
+
+        "--remote-components",
+        "ejs:npm",
+
+        # Maximum 720p
         "-f",
-        "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
+        "bv*[height<=720][ext=mp4]+ba[ext=m4a]/"
+        "b[height<=720][ext=mp4]/b",
 
         "--merge-output-format",
         "mp4",
 
         "--write-info-json",
 
+        "--retries",
+        "10",
+
+        "--fragment-retries",
+        "10",
+
+        "--socket-timeout",
+        "60",
+
+        "--continued",
+
         "-o",
         str(output_template),
-
-        url,
     ]
+
+    # ========================================================
+    # ADD COOKIE FILE
+    # ========================================================
+
+    if cookie_file:
+
+        command.extend(
+            [
+                "--cookies",
+                str(cookie_file),
+            ]
+        )
+
+    # URL terakhir
+    command.append(url)
 
     print()
     print(
-        "[INFO] Mengunduh video dari URL..."
-    )
-
-    result = subprocess.run(
-        command,
-        cwd=str(BASE_DIR),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    if result.stdout:
-        print(result.stdout)
-
-    if result.returncode != 0:
-
-        if result.stderr:
-            print(result.stderr)
-
-        raise RuntimeError(
-            "Gagal download video dari URL.\n"
-            f"{result.stderr[-5000:]}"
-        )
-
-    # ========================================================
-    # FIND VIDEO
-    # ========================================================
-
-    downloaded_files = [
-        file
-        for file in TEMP_DIR.glob(
-            f"{prefix}.*"
-        )
-        if (
-            file.is_file()
-            and file.suffix.lower()
-            not in {
-                ".part",
-                ".ytdl",
-                ".json",
-            }
-        )
-    ]
-
-    if not downloaded_files:
-
-        raise RuntimeError(
-            "Download selesai tetapi "
-            "file video tidak ditemukan."
-        )
-
-    mp4_files = [
-        file
-        for file in downloaded_files
-        if file.suffix.lower() == ".mp4"
-    ]
-
-    if mp4_files:
-
-        downloaded_file = mp4_files[0]
-
-    else:
-
-        downloaded_file = downloaded_files[0]
-
-    # ========================================================
-    # READ METADATA
-    # ========================================================
-
-    metadata_files = list(
-        TEMP_DIR.glob(
-            f"{prefix}.*.info.json"
-        )
-    )
-
-    metadata = {}
-
-    if metadata_files:
-
-        try:
-
-            with metadata_files[0].open(
-                "r",
-                encoding="utf-8",
-            ) as f:
-
-                metadata = json.load(f)
-
-        except Exception as e:
-
-            print(
-                f"[WARNING] Metadata gagal dibaca: {e}"
-            )
-
-    # ========================================================
-    # SIZE
-    # ========================================================
-
-    size = downloaded_file.stat().st_size
-
-    if size <= 0:
-
-        safe_delete(
-            downloaded_file
-        )
-
-        raise RuntimeError(
-            "Video hasil download kosong."
-        )
-
-    print(
-        f"[OK] Download selesai: {downloaded_file}"
-    )
-
-    print(
-        f"[OK] Size: {size:,} bytes"
+        "[INFO] Menjalankan yt-dlp..."
     )
 
     # ========================================================
-    # DELETE OLD VIDEO
+    # DOWNLOAD
     # ========================================================
 
-    if output_file.exists():
+    try:
 
-        available = wait_until_file_available(
-            output_file,
-            retries=30,
-            delay=0.5,
+        result = subprocess.run(
+            command,
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
-        if not available:
+        if result.stdout:
+            print(result.stdout)
+
+        if result.returncode != 0:
+
+            if result.stderr:
+                print(result.stderr)
 
             raise RuntimeError(
-                "Podcast.mp4 sedang digunakan "
-                "oleh proses lain."
+                "Gagal download video dari URL.\n"
+                f"{result.stderr[-5000:]}"
             )
 
-        if not safe_delete(output_file):
+        # ====================================================
+        # FIND VIDEO
+        # ====================================================
+
+        downloaded_files = [
+            file
+            for file in TEMP_DIR.glob(
+                f"{prefix}.*"
+            )
+            if (
+                file.is_file()
+                and file.suffix.lower()
+                not in {
+                    ".part",
+                    ".ytdl",
+                    ".json",
+                }
+            )
+        ]
+
+        if not downloaded_files:
 
             raise RuntimeError(
-                "Podcast.mp4 lama tidak dapat dihapus."
+                "Download selesai tetapi "
+                "file video tidak ditemukan."
             )
 
-    # ========================================================
-    # MOVE
-    # ========================================================
+        mp4_files = [
+            file
+            for file in downloaded_files
+            if file.suffix.lower() == ".mp4"
+        ]
 
-    downloaded_file.replace(
-        output_file
-    )
+        if mp4_files:
 
-    # ========================================================
-    # VERIFY
-    # ========================================================
+            downloaded_file = mp4_files[0]
 
-    if not output_file.exists():
+        else:
 
-        raise RuntimeError(
-            "Video gagal dipindahkan "
-            "ke Podcast.mp4."
+            downloaded_file = downloaded_files[0]
+
+        # ====================================================
+        # READ METADATA
+        # ====================================================
+
+        metadata_files = list(
+            TEMP_DIR.glob(
+                f"{prefix}.*.info.json"
+            )
         )
 
-    final_size = output_file.stat().st_size
+        metadata = {}
 
-    if final_size <= 0:
+        if metadata_files:
 
-        raise RuntimeError(
-            "Podcast.mp4 hasil download kosong."
+            try:
+
+                with metadata_files[0].open(
+                    "r",
+                    encoding="utf-8",
+                ) as f:
+
+                    metadata = json.load(f)
+
+            except Exception as e:
+
+                print(
+                    f"[WARNING] Metadata gagal dibaca: {e}"
+                )
+
+        # ====================================================
+        # SIZE
+        # ====================================================
+
+        size = downloaded_file.stat().st_size
+
+        if size <= 0:
+
+            safe_delete(
+                downloaded_file
+            )
+
+            raise RuntimeError(
+                "Video hasil download kosong."
+            )
+
+        print(
+            f"[OK] Download selesai: {downloaded_file}"
         )
 
-    # ========================================================
-    # METADATA
-    # ========================================================
+        print(
+            f"[OK] Size: {size:,} bytes"
+        )
 
-    source_metadata = {
-        "source": "youtube",
-        "url": url,
-        "title": metadata.get(
-            "title",
-            "Untitled Video",
-        ),
-        "description": metadata.get(
-            "description",
-            "",
-        ),
-        "channel": metadata.get(
-            "channel",
-            metadata.get(
+        # ====================================================
+        # DELETE OLD VIDEO
+        # ====================================================
+
+        if output_file.exists():
+
+            available = wait_until_file_available(
+                output_file,
+                retries=30,
+                delay=0.5,
+            )
+
+            if not available:
+
+                raise RuntimeError(
+                    "Podcast.mp4 sedang digunakan "
+                    "oleh proses lain."
+                )
+
+            if not safe_delete(
+                output_file
+            ):
+
+                raise RuntimeError(
+                    "Podcast.mp4 lama tidak dapat dihapus."
+                )
+
+        # ====================================================
+        # MOVE
+        # ====================================================
+
+        downloaded_file.replace(
+            output_file
+        )
+
+        # ====================================================
+        # VERIFY
+        # ====================================================
+
+        if not output_file.exists():
+
+            raise RuntimeError(
+                "Video gagal dipindahkan "
+                "ke Podcast.mp4."
+            )
+
+        final_size = (
+            output_file.stat().st_size
+        )
+
+        if final_size <= 0:
+
+            raise RuntimeError(
+                "Podcast.mp4 hasil download kosong."
+            )
+
+        # ====================================================
+        # METADATA
+        # ====================================================
+
+        source_metadata = {
+            "source": "youtube",
+            "url": url,
+            "title": metadata.get(
+                "title",
+                "Untitled Video",
+            ),
+            "description": metadata.get(
+                "description",
+                "",
+            ),
+            "channel": metadata.get(
+                "channel",
+                metadata.get(
+                    "uploader",
+                    "",
+                ),
+            ),
+            "uploader": metadata.get(
                 "uploader",
                 "",
             ),
-        ),
-        "uploader": metadata.get(
-            "uploader",
-            "",
-        ),
-        "duration": metadata.get(
-            "duration",
-            0,
-        ),
-        "thumbnail": metadata.get(
-            "thumbnail",
-            None,
-        ),
-        "video_id": metadata.get(
-            "id",
-            "",
-        ),
-        "downloaded_at": time.time(),
-    }
+            "duration": metadata.get(
+                "duration",
+                0,
+            ),
+            "thumbnail": metadata.get(
+                "thumbnail",
+                None,
+            ),
+            "video_id": metadata.get(
+                "id",
+                "",
+            ),
+            "downloaded_at": time.time(),
+        }
 
-    print()
-    print(
-        "[SOURCE TITLE]"
-    )
+        print()
+        print(
+            "[SOURCE TITLE]"
+        )
 
-    print(
-        source_metadata["title"]
-    )
+        print(
+            source_metadata["title"]
+        )
 
-    print()
-    print(
-        f"[OK] Video tersimpan: {output_file}"
-    )
+        print()
+        print(
+            f"[OK] Video tersimpan: {output_file}"
+        )
 
-    print(
-        f"[OK] Final size: {final_size:,} bytes"
-    )
+        print(
+            f"[OK] Final size: {final_size:,} bytes"
+        )
 
-    # ========================================================
-    # CLEAN TEMP METADATA
-    # ========================================================
+        # ====================================================
+        # CLEAN TEMP METADATA
+        # ====================================================
 
-    for metadata_file in metadata_files:
-        safe_delete(metadata_file)
+        for metadata_file in metadata_files:
 
-    return {
-        "path": str(output_file),
-        "size": final_size,
-        "metadata": source_metadata,
-    }
+            safe_delete(
+                metadata_file
+            )
+
+        return {
+            "path": str(output_file),
+            "size": final_size,
+            "metadata": source_metadata,
+        }
+
+    finally:
+
+        # ====================================================
+        # SECURITY CLEANUP
+        # ====================================================
+
+        if cookie_file:
+
+            try:
+
+                if cookie_file.exists():
+
+                    cookie_file.unlink()
+
+                    print(
+                        "[SECURITY] Temporary "
+                        "YouTube cookie deleted."
+                    )
+
+            except Exception as e:
+
+                print(
+                    "[WARNING] Gagal menghapus "
+                    f"temporary cookie: {e}"
+                )
 
 
 # ============================================================
@@ -1648,7 +1792,7 @@ async def upload_video_url(
         )
 
         # ====================================================
-        # SAVE METADATA SETELAH RESET
+        # SAVE METADATA
         # ====================================================
 
         metadata = download_result.get(
@@ -2045,7 +2189,6 @@ def get_clip(
 
 if __name__ == "__main__":
 
-    import os
     import uvicorn
 
     port = int(
