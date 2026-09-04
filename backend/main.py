@@ -63,7 +63,7 @@ for directory in [
 
 app = FastAPI(
     title="ClipForge AI API",
-    version="5.5.0",
+    version="5.5.1",
 )
 
 
@@ -1022,6 +1022,19 @@ def download_video_from_url(
                     "Cookie data kosong."
                 )
 
+            # Validasi bahwa hasil decode memang terlihat seperti
+            # Netscape cookies.txt. Jangan pernah mencetak isinya.
+            cookie_preview = cookie_bytes[:512].decode(
+                "utf-8",
+                errors="ignore",
+            )
+
+            if "Netscape HTTP Cookie File" not in cookie_preview:
+                print(
+                    "[WARNING] Cookie hasil decode bukan format "
+                    "Netscape yang dikenali."
+                )
+
             cookie_file = (
                 Path(tempfile.gettempdir())
                 / f"clipforge_youtube_{download_id}.txt"
@@ -1067,7 +1080,7 @@ def download_video_from_url(
 
         # YouTube JavaScript challenge support
         "--js-runtimes",
-        "deno",
+        os.getenv("YTDLP_DENO_PATH", "deno"),
 
         "--remote-components",
         "ejs:npm",
@@ -1119,6 +1132,21 @@ def download_video_from_url(
     )
 
     # ========================================================
+    # TOOL DIAGNOSTICS
+    # ========================================================
+
+    deno_runtime = os.getenv("YTDLP_DENO_PATH", "deno")
+    deno_resolved = shutil.which(deno_runtime)
+
+    if deno_resolved:
+        print(f"[OK] Deno runtime: {deno_resolved}")
+    else:
+        print(
+            f"[WARNING] Deno runtime tidak ditemukan: {deno_runtime}. "
+            "yt-dlp akan mencoba menggunakan runtime yang dikonfigurasi."
+        )
+
+    # ========================================================
     # DOWNLOAD
     # ========================================================
 
@@ -1141,9 +1169,15 @@ def download_video_from_url(
             if result.stderr:
                 print(result.stderr)
 
+            diagnostic = (
+                (result.stderr or "")
+                + "\n"
+                + (result.stdout or "")
+            ).strip()
+
             raise RuntimeError(
                 "Gagal download video dari URL.\n"
-                f"{result.stderr[-5000:]}"
+                f"{diagnostic[-8000:]}"
             )
 
         # ====================================================
@@ -1162,6 +1196,7 @@ def download_video_from_url(
                     ".part",
                     ".ytdl",
                     ".json",
+                    ".temp",
                 }
             )
         ]
@@ -1193,7 +1228,7 @@ def download_video_from_url(
 
         metadata_files = list(
             TEMP_DIR.glob(
-                f"{prefix}.*.info.json"
+                f"{prefix}.info.json"
             )
         )
 
@@ -1407,7 +1442,7 @@ def root():
 
     return {
         "name": "ClipForge AI",
-        "version": "5.5.0",
+        "version": "5.5.1",
         "status": "online",
         "max_clips": MAX_CLIPS,
 
